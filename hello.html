@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Know your Weather-Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f4;
+    }
+    h1, h2 {
+      text-align: center;
+      color: #333;
+    }
+    .container {
+      width: 80%;
+      margin: auto;
+      padding: 20px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+    form {
+      margin-bottom: 20px;
+    }
+    #search {
+      width: calc(100% - 22px);
+      padding: 10px;
+      border: 2px solid #ddd;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+    #search:focus {
+      border-color: #007bff;
+      outline: none;
+    }
+    #map {
+      height: 400px;
+      width: 100%;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    button {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      border: none;
+      background-color: #007bff;
+      color: #fff;
+      font-size: 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    #entriesList {
+      list-style-type: none;
+      padding: 0;
+    }
+    #entriesList li {
+      background: #f9f9f9;
+      margin: 5px 0;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Know your Weather-Dashboard</h1>
+    <form id="entryForm">
+      <label for="date">Date:</label>
+      <input type="date" id="date" name="date" required>
+      <input type="text" id="search" placeholder="Search for a place">
+      <div id="map"></div>
+      <button type="submit">Save Location</button>
+    </form>
+
+    <h2>Saved Entries</h2>
+    <ul id="entriesList"></ul>
+  </div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    let map, marker, selectedLocation;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      map = L.map('map').setView([9.498, 76.338], 10); // Default to Alappuzha
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(map);
+
+      marker = L.marker([9.498, 76.338], { draggable: true }).addTo(map);
+
+      marker.on('dragend', function (event) {
+        const position = marker.getLatLng();
+        selectedLocation = {
+          lat: position.lat,
+          lng: position.lng
+        };
+      });
+
+      // Initialize selectedLocation to the default location
+      selectedLocation = { lat: 9.498, lng: 76.338 };
+
+      // Add click event to map to place marker
+      map.on('click', function(event) {
+        const latlng = event.latlng;
+        marker.setLatLng(latlng);
+        selectedLocation = {
+          lat: latlng.lat,
+          lng: latlng.lng
+        };
+      });
+
+      // Handle search functionality
+      document.getElementById('search').addEventListener('input', async (e) => {
+        const query = e.target.value;
+        if (query.length > 2) { // Search only if query length > 2
+          try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1`);
+            const results = await response.json();
+            if (results.length > 0) {
+              const firstResult = results[0];
+              const lat = parseFloat(firstResult.lat);
+              const lon = parseFloat(firstResult.lon);
+              map.setView([lat, lon], 13);
+              marker.setLatLng([lat, lon]);
+              selectedLocation = { lat, lng: lon };
+            }
+          } catch (error) {
+            console.error('Error:', error);
+          }
+        }
+      });
+    });
+
+    document.getElementById('entryForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const date = document.getElementById('date').value;
+
+      try {
+        const response = await fetch('http://localhost:3000/api/entries', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ date, location: selectedLocation })
+        });
+
+        if (response.ok) {
+          alert('Location saved!');
+          loadEntries();
+        } else {
+          const errorData = await response.json();
+          alert(`Failed to save location: ${errorData.error}`);
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        alert('An error occurred while saving the location.');
+      }
+    });
+
+    async function loadEntries() {
+      try {
+        const response = await fetch('http://localhost:3000/api/entries');
+        const entries = await response.json();
+        const entriesList = document.getElementById('entriesList');
+        entriesList.innerHTML = '';
+        entries.forEach(entry => {
+          const li = document.createElement('li');
+          li.textContent = `${entry.date}: (${entry.location.lat.toFixed(6)}, ${entry.location.lng.toFixed(6)})`;
+          entriesList.appendChild(li);
+        });
+      } catch (error) {
+        console.error('Error:', error);
+        alert('An error occurred while retrieving the entries.');
+      }
+    }
+
+    loadEntries();
+  </script>
+</body>
+</html>
+
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weather Dashboard</title>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+    }
+    #map {
+      height: 400px;
+      width: 100%;
+    }
+    .sidebar {
+      height: 100vh;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 220px;
+      background: #343a40;
+      padding-top: 20px;
+    }
+    .sidebar a {
+      color: #fff;
+      display: block;
+      padding: 15px;
+      text-decoration: none;
+    }
+    .sidebar a:hover {
+      background: #007bff;
+    }
+    .content {
+      margin-left: 240px;
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <a href="prediction.html">Prediction</a>
+    <a href="#">Today's Weather</a>
+    <form class="form-inline my-2 my-lg-0 p-3">
+      <input class="form-control mr-sm-2" type="search" placeholder="Search" aria-label="Search" id="search-bar">
+      <button class="btn btn-outline-success my-2 my-sm-0" type="submit" id="search-button">Search</button>
+    </form>
+  </div>
+
+  <div class="content">
+    <h1>Weather Dashboard</h1>
+    <h2>Today's Weather</h2>
+    <div id="today-weather">
+      <!-- Weather information will be loaded here -->
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    $(document).ready(function() {
+      function loadTodayWeather() {
+        $('#today-weather').html('<p>Loading weather...</p>');
+        setTimeout(() => {
+          $('#today-weather').html('<p>Sunny, 25°C</p>');
+        }, 1000);
+      }
+
+      loadTodayWeather();
+
+      $('#search-button').on('click', function(e) {
+        e.preventDefault();
+        const query = $('#search-bar').val();
+        if (query.length > 2) {
+          alert(`Search for weather in ${query}`);
+        }
+      });
+    });
+  </script>
+</body>
+</html>
